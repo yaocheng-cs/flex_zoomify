@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:HBox xmlns:mx="http://www.adobe.com/2006/mxml" width="100%" height="45">
+	
+    <mx:HSlider id="hs" value="{data.layer.alpha}"
+    			width="100%" height="100%"
+    			borderColor="0x4B999A" toolTip="alpha"
+    			minimum="0" maximum="1" tickInterval="0.2"
+    			liveDragging="true" change="data.layer.alpha = hs.value"/>
+    
+    <mx:Label text="{data.id.toString()}"/>
+	
+</mx:HBox>

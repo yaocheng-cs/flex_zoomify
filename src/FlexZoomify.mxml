@@ -1,0 +1,1708 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml"
+				xmlns:fz="com.repilac.multimap.*"
+				backgroundColor="0xFFFFFF"
+				backgroundGradientColors="[0xFFFFFF, 0xFFFFFF]"
+ 				layout="absolute"
+ 				historyManagementEnabled="false"
+ 				creationComplete="initApplication();">
+
+<mx:Script>
+	<![CDATA[
+		import flash.net.*;
+		import mx.events.CloseEvent;
+		import mx.core.UIComponent;
+		import mx.containers.Panel;
+		import mx.containers.GridRow;
+		import mx.containers.GridItem;
+		import mx.controls.VSlider;
+		import mx.controls.HSlider;
+		import mx.controls.Button;
+		import mx.controls.CheckBox;
+		import mx.controls.List;
+		import mx.controls.Alert;
+		import mx.events.SliderEvent;
+		import mx.events.ListEvent;
+		import mx.binding.utils.*;
+		import com.repilac.multimap.*;
+		
+		protected var URLParameters:Object;
+		protected var initView:ZoomRect;
+		protected var initViewExisted:Boolean;
+		
+		protected var imagePaths:Array;
+		protected var imageLayers:Array;
+		protected var numImages:int;
+		
+		protected var sagittalPaths:Array;
+		protected var sagittalProvider:Array;
+		protected var sagittalLayers:Array;
+		protected var coronalPaths:Array;
+		protected var coronalProvider:Array;
+		protected var coronalLayers:Array;
+		protected var referencePaths:Array;
+		protected var referenceLayers:Array;
+		protected var selectedReference:MapLayer;
+		
+		public var showingMapLayers:Array;
+		protected var showingMapLayersCopy:Array;
+		
+		protected var editEnabled:Boolean = true;
+		protected var _currentML:MapLayer;
+		public function get currentML():MapLayer
+		{
+			return this._currentML;
+		}
+		public function set currentML(value:MapLayer):void
+		{
+			if(this._currentML){
+				this._currentML.AL.emptyFocusList();
+				//set drawer to null, and no need to add selector because the old currentML is loosing focus
+				if(this.drawer){
+					this._currentML.AL.drawer = null;
+				} else{
+					this._currentML.AL.unsetSelector();
+				}
+			}
+			this._currentML = value;
+			if(this.drawer){
+				this._currentML.AL.drawer = this.drawer;
+			} else{
+				this._currentML.AL.setSelector();
+			}
+		}
+		protected var drawer:Drawer;
+		protected var editPanel:Panel;
+		protected var pressedButton:Button;
+		
+		protected var unsavedAnnotation:Boolean;
+		protected var unsavedMLs:Array;
+		protected var serverOperationType:int;
+		protected var matchInfo:Object;  //for receiving match information from server
+		protected var matchString:String;  //for sending match information to server
+		//protected var matchString:String = "s,7,0.6315759661271365,0.07877706501267401,-0.12971380828978857,0.5900987014458275,37.73291133862951,-2.6324397807893263,1.9278444115375093"
+				
+		protected var zoomifyPropertiesReady:Boolean;
+		protected var ZOOM:Number;
+		protected var ORIGIN:Point;
+		protected var VIEW:ZoomRect;
+		
+		protected var maps:Array;
+		protected var navigator:Navigator;
+		protected var matchMaker:MatchMaker;
+		
+		protected var oldMapWidth:Number;
+		protected var oldMapHeight:Number;
+		
+		protected var playGround:AnnotationLayer;
+		
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+		//protected var ROILayer:ReferenceROILayer = new ReferenceROILayer();
+		protected var roi1:String = "M 1889.5586,2746.7298 C 1887.1274,2743.0193 1854.0371,2673.9633 1851.4805,2667.2648 C 1850.1717,2663.8355 1848.3816,2657.9855 1847.5027,2654.2648 C 1846.6237,2650.5442 1845.6836,2646.6 1845.4136,2645.5 C 1841.8942,2631.1643 1840.779,2620.669 1839.9413,2594 C 1833.9588,2403.5421 1833.5141,2346.3386 1837.4495,2273.5 C 1842.5377,2179.3239 1851.8126,2120.3391 1872.4356,2051 C 1891.7553,1986.043 1915.1917,1943.553 1956.4541,1898.6749 C 1966.8515,1887.3664 1999.4527,1858.1542 2013.1685,1847.8562 C 2032.8656,1833.0673 2081.5414,1803.4068 2102.4724,1793.439 C 2157.0705,1767.4382 2202.6086,1750.691 2254.5933,1737.4946 C 2296.5822,1726.8358 2311.2722,1724.2976 2339.7366,1722.7835 C 2359.3748,1721.7388 2364.1225,1721.807 2380.3659,1723.3668 C 2402.4724,1725.4897 2424.3693,1729.6484 2438.2708,1734.3642 C 2449.8897,1738.3057 2450.1788,1738.4497 2462.7233,1746.5467 C 2467.796,1749.821 2475.1799,1754.525 2479.1318,1757 C 2483.0837,1759.475 2488.3833,1762.8051 2490.9085,1764.4001 C 2498.2374,1769.0293 2502.1565,1771.4865 2507.5,1774.803 C 2510.25,1776.5098 2513.4,1778.6183 2514.5,1779.4887 C 2515.6,1780.3591 2520.1,1783.4468 2524.5,1786.3504 C 2528.9,1789.2539 2534.525,1793.0776 2537,1794.8475 C 2539.475,1796.6174 2542.625,1798.8294 2544,1799.763 C 2545.375,1800.6967 2549.8257,1803.9444 2553.8903,1806.9803 C 2557.955,1810.0161 2563.4703,1814.0109 2566.1465,1815.8576 C 2576.6629,1823.1145 2606.9165,1855.0617 2617.5,1870.086 C 2632.3972,1891.2339 2646.6176,1921.3911 2654.4674,1948.4829 C 2659.516,1965.907 2659.8004,1988.0581 2655.6103,2037.5 C 2653.4544,2062.9401 2651.9906,2088.6492 2651.9665,2101.5 C 2651.9551,2107.55 2651.5128,2116.775 2650.9836,2122 C 2650.4544,2127.225 2649.537,2137.35 2648.945,2144.5 C 2648.3529,2151.65 2647.2175,2161.0665 2646.4219,2165.4255 C 2645.6263,2169.7846 2644.0706,2180.8096 2642.9648,2189.9255 C 2641.859,2199.0415 2639.1875,2215.95 2637.028,2227.5 C 2630.0217,2264.9738 2626.1282,2287.2665 2624.5402,2299 C 2623.6841,2305.325 2621.1795,2320.625 2618.9744,2333 C 2615.0131,2355.23 2607.7421,2415.9154 2606.4211,2437.7714 C 2606.0465,2443.9706 2605.4275,2449.2358 2605.0458,2449.4717 C 2604.664,2449.7077 2599.885,2449.2623 2594.4258,2448.4821 C 2569.342,2444.8969 2529.1355,2447.4467 2505.5914,2454.1157 C 2477.0357,2462.2043 2460.353,2473.902 2414.0118,2518.3301 C 2404.9303,2527.0367 2394.8,2536.7453 2391.5,2539.9048 C 2381.5291,2549.4512 2357.284,2567.326 2335.5,2581.191 C 2331.1,2583.9915 2325.025,2587.9473 2322,2589.9817 C 2318.975,2592.0161 2311.325,2596.5262 2305,2600.0042 C 2298.675,2603.4823 2286.975,2610.0126 2279,2614.5162 C 2263.6376,2623.1915 2238.4217,2635.3785 2221,2642.5482 C 2215.225,2644.9248 2205.775,2648.955 2200,2651.5042 C 2178.8551,2660.8381 2152.315,2670.612 2128,2678.0197 C 2122.225,2679.7791 2115.925,2681.7836 2114,2682.4742 C 2112.075,2683.1648 2108.025,2684.2826 2105,2684.9582 C 2101.975,2685.6339 2089.6,2688.5731 2077.5,2691.4898 C 2065.4,2694.4066 2052.4358,2697.3074 2048.6906,2697.9361 C 2039.0706,2699.5511 1982.5154,2713.6775 1976.5,2715.9679 C 1971.2211,2717.9779 1965.3746,2719.9429 1955.5,2723.0258 C 1949.5605,2724.8801 1907.0259,2741.8454 1903.2507,2743.8658 C 1902.1734,2744.4424 1898.9812,2745.8249 1896.1567,2746.9382 L 1891.0214,2748.9624 L 1889.5586,2746.7298 z";
+		protected var roi4:String = "M 4036.5,2745.3732 C 4032.1,2743.3918 4025.125,2740.4058 4021,2738.7376 C 4016.875,2737.0693 4008.325,2733.5687 4002,2730.9585 C 3981.1293,2722.3455 3951.049,2712.9446 3920.5367,2705.4991 C 3904.0165,2701.4679 3888.475,2697.8646 3886,2697.4916 C 3877.3321,2696.1856 3828.7554,2684.2799 3814.5,2679.9676 C 3781.0724,2669.8557 3768.0272,2665.0189 3729,2648.2663 C 3723.225,2645.7873 3715.2918,2642.4952 3711.3706,2640.9505 C 3691.409,2633.0868 3637.6087,2604.6751 3616,2590.5858 C 3600.3978,2580.4129 3598.2888,2579.1002 3594.5,2577.2036 C 3592.3,2576.1024 3585.8236,2571.6686 3580.108,2567.3507 C 3574.3924,2563.0328 3567.8674,2558.2029 3565.608,2556.6176 C 3556.2029,2550.0186 3539.321,2535.0354 3519.8432,2516 C 3500.6648,2497.2571 3496.6999,2493.6337 3485.5169,2484.6295 C 3457.0157,2461.6813 3439.0063,2453.6456 3405.7578,2449.0414 C 3387.9099,2446.57 3357.8002,2446.2881 3342.5415,2448.4496 C 3337.0643,2449.2255 3332.269,2449.6663 3331.8852,2449.429 C 3330.905,2448.8233 3330.22,2442.5976 3328.4771,2418.4547 C 3327.6415,2406.8798 3326.2957,2393.1548 3325.4864,2387.9547 C 3324.6771,2382.7546 3322.8732,2369.5 3321.4777,2358.5 C 3318.8421,2337.7244 3315.3219,2316.7597 3304.5187,2257.5 C 3301.0094,2238.25 3297.8437,2220.25 3297.4839,2217.5 C 3297.124,2214.75 3295.9832,2207.325 3294.9488,2201 C 3289.3757,2166.9238 3284.0079,2109.2492 3283.9959,2083.3161 C 3283.9937,2078.4673 3282.8619,2062.125 3281.4809,2047 C 3278.2678,2011.8087 3277.2745,1980.8636 3278.9285,1967.4794 C 3282.1662,1941.2801 3288.1062,1924.906 3308.1238,1887 C 3311.1222,1881.3221 3319.7671,1868.9485 3328.49,1857.8493 C 3338.3324,1845.3257 3365.131,1819.089 3375.1385,1812.1789 C 3376.9873,1810.9022 3382.1,1807.164 3386.5,1803.8716 C 3390.9,1800.5792 3396.075,1797.0083 3398,1795.9361 C 3399.925,1794.864 3404.65,1791.7139 3408.5,1788.936 C 3415.2823,1784.0423 3422.5012,1779.2005 3430.25,1774.3483 C 3432.3125,1773.0567 3435.9125,1770.797 3438.25,1769.3267 C 3440.5875,1767.8565 3444.075,1765.6633 3446,1764.453 C 3447.925,1763.2427 3456.774,1757.5021 3465.6645,1751.6961 C 3484.9195,1739.1215 3485.1682,1738.9879 3497.6805,1734.4929 C 3510.253,1729.9764 3534.6465,1725.3793 3557.2614,1723.2647 C 3572.6088,1721.8297 3577.9775,1721.7625 3596.7614,1722.7704 C 3624.608,1724.2645 3639.4801,1726.8516 3681.4067,1737.4946 C 3713.623,1745.6727 3742.5506,1754.982 3774,1767.2922 C 3788.9856,1773.158 3831.5604,1791.7511 3841.8311,1796.9151 C 3854.45,1803.2598 3912.5311,1839.5775 3922.5,1847.3569 C 3966.9871,1882.0729 3995.3608,1912.4692 4022.5139,1954.5 C 4031.4046,1968.2622 4048.1237,2003.2996 4054.9619,2022.5 C 4069.9926,2064.7029 4081.3564,2109.2756 4086.4483,2146 C 4087.3253,2152.325 4088.6963,2161.325 4089.4951,2166 C 4092.8777,2185.7966 4095.0842,2210.2846 4097.4696,2254.5 C 4102.5656,2348.9604 4102.8753,2358.4814 4101.9749,2393 C 4101.5086,2410.875 4100.4348,2452.725 4099.5887,2486 C 4096.1661,2620.5965 4095.9432,2624.7121 4090.8408,2647.5 C 4088.332,2658.7046 4080.1604,2678.8685 4068.5516,2702.5 C 4061.797,2716.25 4055.0045,2730.425 4053.4571,2734 C 4051.9097,2737.575 4050.0489,2741.2104 4049.3218,2742.0787 C 4048.5948,2742.947 4048,2744.3195 4048,2745.1287 C 4048,2746.5717 4046.1346,2749.0119 4045.05,2748.9878 C 4044.7475,2748.9811 4040.9,2747.3545 4036.5,2745.3732 z";
+		
+		public var s010:String;
+		public function loadROI():void
+		{
+			var url:URLRequest = new URLRequest("../data/ARA-Sagittal-020-data");
+			var loader:URLLoader = new URLLoader();
+			loader.addEventListener(Event.COMPLETE, ROILoaded);
+			function ROILoaded(e:Event):void
+			{
+				s010 = e.target.data;
+				trace('bbb');
+			}
+			loader.load(url);
+		}
+		
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+		[Embed(source="../icon/elli.jpeg")]
+		public var elliIcon:Class;
+			
+		[Embed(source="../icon/rect.jpeg")]
+		public var rectIcon:Class;
+		
+		[Embed(source="../icon/poly.jpeg")]
+		public var polyIcon:Class;
+		
+		[Embed(source="../icon/erase.jpeg")]
+		public var eraseIcon:Class;
+		
+		[Embed(source="../icon/cancel.jpeg")]
+		public var cancelIcon:Class;
+		
+		protected var icons:Array = [elliIcon, rectIcon, polyIcon, eraseIcon, cancelIcon];
+		
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		
+		public static function getHtmlParameters():Object
+		{
+			// retrieve the query string
+			var uparam:String = ExternalInterface.call("window.location.search.toString");
+			
+			if(uparam == "" || uparam == null){
+	 			return null;
+			}
+			// build the parameter+value pairs array
+			var paramArray:Array = uparam.substr(1).split('&');
+			
+			// build the parameters object
+			var paramsObject:Object = new Object;
+			for(var x:int=0; x<paramArray.length; x++){
+				// split the name/value pair on "="
+				var splitArray:Array = paramArray[x].split('=');
+				// retrieve name and value for this parameter
+				var name:String = splitArray[0];
+				var value:String = splitArray[1];
+				// adds the parameter to the result object
+				paramsObject[name] = value;
+			}
+			// returns the result object
+			return paramsObject;
+		}
+		
+		public function getImagePaths():Array
+		{
+			this.URLParameters = getHtmlParameters();
+			
+			var paths:Array = new Array();
+			if(this.URLParameters != null){
+				var pname:String;
+				var i:int;
+				for(i=1; i<5; i++){
+        			pname = "image" + i.toString();
+					if(this.URLParameters.hasOwnProperty(pname)){
+						paths.push(this.URLParameters[pname]);
+					} else{
+						break;
+					}
+				}
+			} else{
+				//paths = ["http://www.credrivermice.org/_shared/atlas/HwDongAtlasData/090524-ARA-PXX-X-sagittal/1-XX-atlas/ARA-Sagittal-010"];
+				paths = ["http://www.credrivermice.org/_shared/atlasimages/S2693/S2693-2%20anti-gfp.tif-section_010",
+						 "http://www.credrivermice.org/_shared/atlasimages/S2693/S2693-2%20nissle.tif-section_010",
+						 "http://www.credrivermice.org/_shared/atlasimages/S2693/S2693-2%20raw-gfp.tif-section_010"];
+				//paths = ["http://mouse.bio.brandeis.edu:8001/_shared/atlasimages/S2693/S2693-2%20anti-gfp.tif-section_009",
+				//		 "http://mouse.bio.brandeis.edu:8001/_shared/atlasimages/S2693/S2693-2%20nissle.tif-section_009",
+				//		 "http://mouse.bio.brandeis.edu:8001/_shared/atlasimages/S2693/S2693-2%20raw-gfp.tif-section_009"];
+				//paths = ["http://imagesample.appspot.com/_shared/atlas/061204-G42-PXX-X-sagittal/1-Green-GFP/002",
+				//		"http://imagesample.appspot.com/_shared/atlas/061204-G42-PXX-X-sagittal/1-Green-GFP/002",
+				//		"http://imagesample.appspot.com/_shared/atlas/061204-G42-PXX-X-sagittal/1-Green-GFP/002"];
+			}
+			
+			return paths;
+		}
+		
+		public function getInitView():ZoomRect
+		{
+			var zoom:Number;
+			var x:Number;
+			var y:Number;
+			var w:Number;
+			var h:Number;
+			
+			if(this.URLParameters){
+				if(this.URLParameters.hasOwnProperty("zoom") && URLParameters.hasOwnProperty("x") && URLParameters.hasOwnProperty("y") && URLParameters.hasOwnProperty("w") && URLParameters.hasOwnProperty("h")){
+					zoom = this.URLParameters["zoom"];
+					x = this.URLParameters["x"];
+					y = this.URLParameters["y"];
+					w = this.URLParameters["w"];
+					h = this.URLParameters["h"];
+					return new ZoomRect(zoom, x - w / 2, y - h / 2, x + w / 2, y + h / 2);
+				} else{
+					trace("could not get all required parameters from URL!")
+					return null
+				}
+			} else{
+				zoom = 3;
+				x = 600;
+				y = 600;
+				w = 400;
+				h = 200;
+				//return new ZoomRect(zoom, x - w / 2, y - h / 2, x + w / 2, y + h / 2);
+				return null;
+			}
+		}
+		
+		public function prepareReferencePaths():void
+		{
+			var head:String;
+			var firstSection:int
+			var lastSection:int
+			var jump:int
+			
+			head = "http://www.credrivermice.org/_shared/atlas/HwDongAtlasData/090524-ARA-PXX-X-sagittal/1-XX-atlas/ARA-Sagittal-"
+			firstSection = 1;
+			lastSection = 21;
+			jump = 1;
+			this.sagittalPaths = collectPaths();
+			this.sagittalProvider = prepareProvider(this.sagittalPaths);
+			this.sagittalLayers = new Array();
+			
+			head = "http://www.credrivermice.org/_shared/atlas/HwDongAtlasData/090524-ARA-PXX-X-coronal/ARA-Coronal-"
+			firstSection = 4;
+			lastSection = 132;
+			jump = 4;
+			this.coronalPaths = collectPaths();
+			this.coronalProvider = prepareProvider(this.coronalPaths);
+			this.coronalLayers = new Array();
+			
+			function collectPaths():Array
+			{
+				var paths:Array = new Array();
+				var path:String;
+				for(var i:int=firstSection; i<=lastSection; i+=jump){
+					var s:String = i.toString();
+					while(3 - s.length > 0){
+						s = "0" + s;
+					}
+					path = head + s;
+					paths.push(path);
+				}
+				return paths;
+			}
+			
+			function prepareProvider(paths:Array):Array
+			{
+				var provider:Array = new Array();
+				var obj:Object;
+				for(var i:int=0; i<paths.length; i++){
+					obj = new Object();
+					obj.path = paths[i] + "/TileGroup0/0-0-0.jpg";
+					obj.id = i + 1;
+					provider.push(obj);
+				}
+				return provider;
+			}
+		}
+		
+		/*
+		public function checkIfEditEnabled():Boolean
+		{
+			var edit:Boolean;
+			if(this.URLParameters != null && this.URLParameters.hasOwnProperty("edit")){
+				if(this.URLParameters["edit"] == "true"){
+					edit = true;
+				}
+			} else{
+				edit = true;
+			}
+			return edit;
+		}
+		*/
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		
+		public function initApplication():void
+		{
+			//this.loadROI();
+			
+			this.imagePaths = this.getImagePaths();
+			this.numImages = this.imagePaths.length;
+			this.prepareReferencePaths();
+			
+			this.initView = this.getInitView();
+			if(this.initView != null){
+				this.initViewExisted = true;
+			}
+			
+			this.imageLayers = new Array();
+			for(var i:int=0; i<this.numImages; i++){
+				var ml:MapLayer = new MapLayer(this.imagePaths[i]);
+				this.imageLayers.push(ml);
+				ml.userAlpha = 0.5;
+				ml.addEventListener("init_success", this.onMapLayerInitComplete);
+				ml.addEventListener("init_error", this.onMapLayerInitError);
+			}
+			if(this.editEnabled){
+				this.annotationSwitch.visible = true;
+				this.editPanel = this.prepareEditPanel();
+			}
+			
+			/** 
+			 * always starts in the "image only" mode, "expanded" phase
+			 * 
+			 */
+			this.showingMapLayers = this.imageLayers.slice();
+			this.showingMapLayersCopy = new Array();
+			this.maps = this.fillMapGrid(this.mapGrid, this.showingMapLayers.length);
+			//when layers are ready, they will be added to maps, no need to call addLayersToMaps() here
+			this.prepareImageList();
+			if(this.imageLayers.length > 1){
+				this.imageSelect.visible = true;
+			}
+			if(this.showingMapLayers.length > 1){
+				this.layerOverlay.visible = true;
+			}
+			addEventListener("zoomify_property_change", this.onZoomifyPropertyChange);
+		}
+		
+		public function onMapLayerInitComplete(e:Event):void
+		{
+			var ml:MapLayer = e.target as MapLayer;
+			var i:int = this.showingMapLayers.indexOf(ml);
+			var map:Map = this.maps[i] as Map;
+			this.addLayerToMap(ml, map);
+			if(i == 0){
+				if(!this.navigator){
+					this.navigator = new Navigator();
+					this.navigator.updateFromSource(ml.ZL.mapSource as ZoomifySource);
+					this.rightVBox.addChild(this.navigator);
+					this.adjustNavigator(map);
+					this.adjustZoomer(map);
+					this.zoomer.maximum = ml.ZL.mapSource.maxTier;
+					this.zoomer.visible = true;
+				}
+			}
+		}
+		
+		public function onMapLayerInitError(e:Event):void
+		{
+			return;
+		}
+		
+		public function fillMapGrid(mapGrid:Grid, numMaps:int):Array
+		{
+			if(mapGrid.numChildren != 0){
+				mapGrid.removeAllChildren();
+			}
+			var maps:Array = new Array();
+			
+			var numColumns:int = 1;
+			var numRows:int = 1;
+			if(numMaps > 1){
+				numColumns = 2;
+				if(numMaps > 2){
+					numRows = 2;
+				}
+			}
+			
+			var map:Map;
+			var gr:GridRow;
+			var gi:GridItem;
+			var i:int
+			gr = new GridRow();
+			gr.percentWidth = 100;
+			gr.percentHeight = 100;
+			for(i=0; i<numMaps; i++){
+				map = new Map(100, 100);
+				maps.push(map);
+				
+				gi = new GridItem();
+				gi.percentWidth = 100;
+				gi.percentHeight = 100;
+				gi.addChild(map);
+				if(gr.numChildren < numColumns){
+					gr.addChild(gi);
+				} else{
+					mapGrid.addChild(gr);
+					gr = new GridRow();
+					gr.percentWidth = 100;
+					gr.percentHeight = 100;
+					gr.addChild(gi);
+				}
+			}
+			mapGrid.addChild(gr);
+			validateNow();  //This is important! It force Flex to calculate the "actual" size of each map
+			return maps;
+		}
+		
+		public function addLayerToMap(ml:Object, m:Object):void
+		{
+			if(ml is MapLayer && m is Map){
+				if(ml.ZL.mapSourceReady){
+					m.addLayer(ml);
+					this.checkPropertiesWith(m);
+				}
+				return;
+			}
+			var i:int;
+			if(ml is Array && m is Array){
+				ml = ml as Array;
+				m = m as Array;
+				if(ml.length == m.length){
+					for(i=0; i<ml.length; i++){
+						if(!ml[i]){
+							continue;
+						}
+						if(ml[i].ZL.mapSourceReady){
+							m[i].addLayer(ml[i]);
+							this.checkPropertiesWith(m[i]);
+						}
+					}
+					return;
+				}
+				if(ml.length > 1 && m.length == 1){
+					for(i=0; i<ml.length; i++){
+						if(ml[i].ZL.mapSourceReady){
+							m[0].addLayer(ml[i]);
+						}
+					}
+					this.checkPropertiesWith(m[0]);
+					return;
+				}
+			}
+			trace("FlexZoomify: something wrong with the argument");
+		}
+		
+		public function checkPropertiesWith(o:Object):void
+		{
+			if(this.zoomifyPropertiesReady){
+				o.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+			} else{
+				(o as Map).setZoomifyProperties();
+				this.setZoomifyProperties(o);
+				this.zoomifyPropertiesReady = true;
+			}
+		}
+		
+		public function setZoomifyProperties(o:Object):void
+		{
+			this.ZOOM = o.ZOOM;
+			this.ORIGIN = o.ORIGIN;
+			this.VIEW = o.VIEW;
+		}
+		
+		public function adjustZoomifyProperties(oldMapWidth:Number, oldMapHeight:Number, newMapWidth:Number, newMapHeight:Number):void
+		{
+			var keepCenter:Boolean = true;
+			
+			if(!keepCenter){
+				this.zoomifyPropertiesReady = false;
+			} else{
+				if(oldMapWidth == newMapWidth && oldMapHeight == newMapHeight){
+					return;
+				}
+				this.ORIGIN = new Point(this.ORIGIN.x + (newMapWidth - oldMapWidth) / 2, this.ORIGIN.y + (newMapHeight - oldMapHeight) / 2);
+				this.VIEW = new ZoomRect(this.ZOOM, -this.ORIGIN.x, -this.ORIGIN.y, -this.ORIGIN.x + newMapWidth, -this.ORIGIN.y + newMapHeight);
+			}
+		}
+		
+		public function onZoomifyPropertyChange(e:Event):void
+		{
+			this.setZoomifyProperties(e.target);
+			
+			for(var i:int=0; i<this.maps.length; i++){
+				var map:Map = this.maps[i] as Map;
+				//if(!map.changeInitiator){
+					map.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+				//}
+			}
+			if(!this.zoomer.changeInitiator){
+				this.zoomer.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+			}
+			if(!this.navigator.changeInitiator){
+				this.navigator.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+			}
+			
+			e.target.changeInitiator = false;
+		}
+		
+		public function adjustNavigator(m:Map):void
+		{
+			this.navigator.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+			//here, the "mapWidth" and "mapHeight" are two setters
+			BindingUtils.bindProperty(this.navigator, "mapWidth", m, "width");
+			BindingUtils.bindProperty(this.navigator, "mapHeight", m, "height");
+		}
+		
+		public function adjustZoomer(m:Map):void
+		{
+			this.zoomer.setZoomifyProperties(this.ZOOM, this.ORIGIN, this.VIEW);
+			BindingUtils.bindProperty(this.zoomer, "mapWidth", m, "width");
+			BindingUtils.bindProperty(this.zoomer, "mapHeight", m, "height");
+		}
+		
+		public function refreshApplication(numMaps:int=0, layer:ZoomifyLayer=null, mapIndex:int=-1):void
+		{
+			this.oldMapWidth = this.maps[0].width;
+			this.oldMapHeight = this.maps[0].height;
+			if(numMaps > 0){
+				this.maps = this.fillMapGrid(this.mapGrid, numMaps);
+			} else{
+				this.maps = this.fillMapGrid(this.mapGrid, this.showingMapLayers.length);
+			}
+			this.adjustZoomifyProperties(this.oldMapWidth, this.oldMapHeight, this.maps[0].width, this.maps[0].height);
+			if(layer && (mapIndex > -1)){
+				this.addLayerToMap(layer, this.maps[mapIndex]);
+			} else{
+				this.addLayerToMap(this.showingMapLayers, this.maps);
+			}
+			this.adjustNavigator(this.maps[0]);
+			this.adjustZoomer(this.maps[0]);
+			
+			for each (var m:Map in this.maps){
+				m.enable();
+			}
+		}
+		
+		public function prepareImageList():void
+		{
+			var imageListProvider:Array = new Array();
+			for(var i:int=0; i<this.imagePaths.length; i++){
+				var obj:Object = {check: true, path: this.imagePaths[i] + "/TileGroup0/0-0-0.jpg", id: i + 1};
+				imageListProvider.push(obj);
+			}
+			var imageList:List = new List();
+			imageList.width = 270;
+			imageList.height = 145 * this.imageLayers.length;
+			imageList.setStyle("backgroundColor", 0x4B999A);
+			imageList.setStyle("backgroundAlpha", 0.5);
+			imageList.itemRenderer = new ClassFactory(CustomItemRender);
+			imageList.addEventListener(ListEvent.ITEM_CLICK, this.onImageListClick);
+			imageList.dataProvider = imageListProvider;
+			this.imageSelect.popUp = imageList;
+		}
+		
+		public function onImageListClick(e:ListEvent):void
+		{
+			var list:List = List(this.imageSelect.popUp);
+			var layer:MapLayer = this.imageLayers[list.selectedIndex];
+			//if(this.modeTitle.text == "Image Only"){
+			if(this.modeSwitch.label == "Include Reference"){
+				e.stopImmediatePropagation();  //prevent the popup list from being closed when any list item is clicked
+				var i:int = this.showingMapLayers.indexOf(layer);
+				if(i == -1){
+					this.showingMapLayers.push(layer);
+					if(!this.layerOverlay.visible){
+						this.layerOverlay.visible = true;
+					}
+				} else{
+					if(this.showingMapLayers.length == 1){
+						return;  //this is why the update to the list itself should happen later
+					}
+					this.showingMapLayers.splice(i, 1);
+					if(this.showingMapLayers.length == 1){
+						this.layerOverlay.visible = false;
+					}
+				}
+				if(list.dataProvider[list.selectedIndex].check){
+					list.dataProvider[list.selectedIndex].check = false;
+				} else{
+					list.dataProvider[list.selectedIndex].check = true;
+				}
+				list.invalidateList();
+				//update the thumbnail in the navigator
+				this.navigator.updateFromSource(this.showingMapLayers[0].ZL.mapSource as ZoomifySource);
+			} else{
+				//in "reference included mode", the only image layer is always the second showing layer
+				this.showingMapLayers.pop();
+				this.showingMapLayers.push(layer);
+				//update the thumbnail in the navigator
+				this.navigator.updateFromSource(this.showingMapLayers[1].ZL.mapSource as ZoomifySource);
+			}
+			this.refreshApplication();
+		}
+		
+		public function prepareAlphaList():void
+		{
+			var alphaList:List = new List();
+			alphaList.width = 200;
+			alphaList.setStyle("backgroundColor", 0x4B999A);
+			alphaList.setStyle("backgroundAlpha", 0.5);
+			alphaList.itemRenderer = new ClassFactory(CustomItemRender1);
+			alphaList.addEventListener(ListEvent.ITEM_CLICK, this.onAlphaAjust);
+			this.alphaAdjust.popUp = alphaList;
+			this.populateAlphaList();
+		}
+		
+		public function onAlphaAjust(e:ListEvent):void
+		{
+			e.stopImmediatePropagation();  //prevent the popup list from being closed when any list item is clicked
+		}
+		
+		public function populateAlphaList():void
+		{
+			var al:List = this.alphaAdjust.popUp as List;
+			al.height = 50 * this.showingMapLayers.length;
+			var alphaListProvider:Array = new Array();
+			for(var i:int=this.showingMapLayers.length-1; i>-1; i--){
+				this.showingMapLayers[i].alpha = this.showingMapLayers[i].userAlpha;
+				var obj:Object = {layer: this.showingMapLayers[i], id: i};
+				alphaListProvider.push(obj);
+			}
+			al.dataProvider = alphaListProvider;
+		}
+		
+		public function overlayOrExpand():void
+		{
+			var i:int;  //used as a counter
+			var ml:MapLayer;
+			if(this.layerOverlay.label == "Overlay Layers"){
+				for(i=1; i<this.showingMapLayers.length; i++){
+					ml = this.showingMapLayers[i];
+					ml.ZL.externalFlag = false;
+				}
+				this.refreshApplication(1);  //put all showing layers into ONE map
+				if(!this.alphaAdjust.popUp){
+					this.prepareAlphaList();
+				} else{
+					this.populateAlphaList();
+				}
+				this.alphaAdjust.visible = true;
+				this.layerOverlay.label = "Expand Layers";
+				if(this.modeSwitch.label == "Exclude Reference"){
+					this.referenceSelect.visible = false;
+					this.layerMatch.visible = false;
+				}
+				if(this.imageLayers.length > 1){
+					this.imageSelect.visible = false;
+				}
+				this.modeSwitch.visible = false;
+				if(this.editEnabled){
+					this.annotationSwitch.visible = false;
+				}
+			} else{
+				for(i=0; i<this.showingMapLayers.length; i++){
+					ml = this.showingMapLayers[i];
+					ml.ZL.externalFlag = true;
+					ml.userAlpha = ml.alpha;
+					ml.alpha = 1;
+				}
+				this.refreshApplication();
+				this.alphaAdjust.visible = false;
+				this.layerOverlay.label = "Overlay Layers";
+				if(this.modeSwitch.label == "Exclude Reference"){
+					this.referenceSelect.visible = true;
+					this.layerMatch.visible = true;
+				}
+				if(this.imageLayers.length > 1){
+					this.imageSelect.visible = true;
+				}
+				this.modeSwitch.visible = true;
+				if(this.editEnabled){
+					this.annotationSwitch.visible = true;
+				}
+			}
+		}
+		
+		public function prepareReferenceList():void
+		{
+			var referenceList:List = new List();
+			referenceList.width = 255;
+			referenceList.height = this.mapGrid.height;
+			referenceList.setStyle("backgroundColor", 0x4B999A);
+			referenceList.setStyle("backgroundAlpha", 0.5);
+			referenceList.itemRenderer = new ClassFactory(CustomItemRender2);
+			referenceList.addEventListener(ListEvent.ITEM_CLICK, this.onReferenceListClick);
+			this.referenceSelect.popUp = referenceList;
+		}
+		
+		public function decideReferenceProvider():void
+		{
+			if(this.matchInfo){
+				if(this.matchInfo["orientation"] == "c"){
+					this.referencePaths = this.coronalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.coronalProvider;
+					this.referenceLayers = this.coronalLayers;
+				} else{
+					this.referencePaths = this.sagittalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.sagittalProvider;
+					this.referenceLayers = this.sagittalLayers;
+				}
+				return;
+			}
+			if(this.URLParameters && this.URLParameters.hasOwnProperty("orientation")){
+				if(this.URLParameters["orientation"] == "c"){
+					this.referencePaths = this.coronalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.coronalProvider;
+					this.referenceLayers = this.coronalLayers;
+				} else{
+					this.referencePaths = this.sagittalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.sagittalProvider;
+					this.referenceLayers = this.sagittalLayers;
+				}
+				return;
+			}
+			this.referencePaths = this.sagittalPaths;
+			(this.referenceSelect.popUp as List).dataProvider = this.sagittalProvider;
+			this.referenceLayers = this.sagittalLayers;
+		}
+		
+		public function prepareReference():void
+		{
+			this.decideReferenceProvider();
+			
+			if(this.matchInfo){
+				var ml:MapLayer = new MapLayer(this.referencePaths[this.matchInfo["index"]]);
+				ml.addEventListener("init_success", this.onMapLayerInitComplete);
+				ml.addEventListener("init_error", this.onMapLayerInitError);
+				
+				ml.affineTM = new Matrix(this.matchInfo["a"], this.matchInfo["b"], this.matchInfo["c"], this.matchInfo["d"], this.matchInfo["tx"], this.matchInfo["ty"]);
+				ml.originDelta = new ZoomXY(this.matchInfo["zoom"], this.matchInfo["tx"], this.matchInfo["ty"]);
+				var m:Matrix = ml.affineTM.clone();
+				m.tx = m.tx + this.showingMapLayers[0].transform.matrix.tx;
+				m.ty = m.ty + this.showingMapLayers[0].transform.matrix.ty;
+				ml.transform.matrix = m;
+				ml.userAlpha = 0.5;
+				this.referenceLayers[this.matchInfo["index"]] = ml;
+				this.selectedReference = ml;
+			} else{
+				this.selectedReference = null;
+				this.referenceSelect.open();
+			}
+			this.showingMapLayers.unshift(this.selectedReference);
+			this.navigator.updateFromSource(this.showingMapLayers[1].ZL.mapSource as ZoomifySource);  //update the thumbnail in the navigator
+			this.refreshApplication();
+		}
+		
+		public function onReferenceListClick(e:ListEvent):void
+		{	
+			var list:List = List(this.referenceSelect.popUp);			
+			var ml:MapLayer = this.referenceLayers[list.selectedIndex];
+			if(!ml){
+				ml = new MapLayer(this.referencePaths[list.selectedIndex]);
+				this.referenceLayers[list.selectedIndex] = ml;
+				ml.userAlpha = 0.5;
+				ml.addEventListener("init_success", this.onMapLayerInitComplete);
+				ml.addEventListener("init_error", this.onMapLayerInitError);
+			}
+			this.selectedReference = ml;
+			this.showingMapLayers.splice(0, 1, this.selectedReference);
+			//this.refreshApplication(2, this.showingMapLayers[1], 1);
+			this.refreshApplication();
+		}
+		
+		public function onReferenceListOpen():void
+		{
+			if(this.referencePaths == this.sagittalPaths){
+				this.referenceSelect.label = "Show Coronal"
+			} else{
+				this.referenceSelect.label = "Show Sagittal"
+			}
+		}
+		
+		public function onReferenceListClose():void
+		{
+			this.referenceSelect.label = "References";
+		}
+		
+		public function adjustReferenceList():void
+		{
+			if(this.referenceSelect.label == "References"){
+				return;
+			} else{
+				if(this.referencePaths == this.sagittalPaths){
+					this.referenceSelect.label = "Show Sagittal"
+					this.referencePaths = this.coronalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.coronalProvider;
+					this.referenceLayers = this.coronalLayers;
+				} else{
+					this.referenceSelect.label = "Show Coronal"
+					this.referencePaths = this.sagittalPaths;
+					(this.referenceSelect.popUp as List).dataProvider = this.sagittalProvider;
+					this.referenceLayers = this.sagittalLayers;
+				}
+			}
+		}
+		
+		public function switchMode():void
+		{
+			if(this.modeSwitch.label == "Include Reference"){
+				if(!this.referenceSelect.popUp){
+					this.prepareReferenceList();
+				}
+				this.showingMapLayersCopy = this.showingMapLayers.slice();
+				while(this.showingMapLayers.length > 1){ //leave one image to show
+					var ml:MapLayer = this.showingMapLayers.pop();
+				}
+				if(!this.selectedReference){
+					this.serverOperationType = 5;
+					this.serverOperation(this.serverOperationType);
+				} else{
+					this.showingMapLayers.unshift(this.selectedReference);
+					this.navigator.updateFromSource(this.showingMapLayers[1].ZL.mapSource as ZoomifySource);  //update the thumbnail in the navigator
+					this.refreshApplication();
+				}
+				this.modeSwitch.label = "Exclude Reference";
+				this.layerOverlay.visible = true;  //going to side-by-side mode, just show the button for overlay layers
+				this.referenceSelect.visible = true;
+				this.layerMatch.visible = true;
+				List(this.imageSelect.popUp).width = 255;
+				List(this.imageSelect.popUp).itemRenderer = new ClassFactory(CustomItemRender2);
+			} else{
+				while(this.showingMapLayers.length > 0){
+					this.showingMapLayers.pop();
+				}
+				this.showingMapLayers = this.showingMapLayersCopy.slice();
+				this.modeSwitch.label = "Include Reference";
+				this.referenceSelect.visible = false;
+				this.layerMatch.visible = false;
+				if(this.showingMapLayers.length <= 1){
+					this.layerOverlay.visible = false;
+				} //else{
+				//	this.layerOverlay.visible = true;
+				//}
+				List(this.imageSelect.popUp).width = 270;
+				List(this.imageSelect.popUp).itemRenderer = new ClassFactory(CustomItemRender);
+				this.navigator.updateFromSource(this.showingMapLayers[0].ZL.mapSource as ZoomifySource);  //update the thumbnail in the navigator
+				this.refreshApplication();
+			}
+			//this.refreshApplication(2, this.showingMapLayers[1], 1);  //has the same effect as "this.refreshApplication();" here
+		}
+		
+		public function onRoiSelected(e:Event):void
+		{
+			for each (var a:Annotation in this.currentML.AL.focusList){
+				a.term.text = (e.target as ROI).term.text;
+				a.info.term = a.term.text;
+				this.currentML.AL.modifiedInfoList.push(a.info);
+			}
+		}
+		
+		public function makeMatch():void
+		{
+			var OMap:Map = this.maps[0] as Map;
+			var TMap:Map = this.maps[1] as Map
+			var OLayer:MapLayer = OMap.getLayerAt(0);
+			var TLayer:MapLayer = TMap.getLayerAt(0);
+			if(this.layerMatch.label == "Register Match Points"){
+				this.matchMaker = new MatchMaker(OLayer, TLayer);
+				addChild(this.matchMaker);
+				addEventListener("ready_to_match", this.onReadyToMatch);
+				addEventListener(KeyboardEvent.KEY_DOWN, this.onUserInterruptingMatching);
+				OMap.mute();
+				TMap.mute();
+				this.zoomer.mute();
+				this.navigator.mute();
+				this.layerMatch.label = "ESC to Terminate";
+				this.layerMatch.mouseEnabled = false;
+				
+				this.referenceSelect.visible = false;
+				this.modeSwitch.visible = false;
+				this.layerOverlay.visible = false;
+				this.imageSelect.visible = false;
+				if(this.editEnabled){
+					this.annotationSwitch.visible = false;
+				}
+			} else{
+				var m:Matrix = this.matchMaker.calculate();
+				OLayer.affineTM = m.clone();
+				OLayer.originDelta = new ZoomXY(this.ZOOM, m.tx, m.ty);
+				
+				var matchArray:Array;
+				var index:int = this.referenceLayers.indexOf(OLayer);
+				if(this.referencePaths == this.sagittalPaths){
+					matchArray = ["s", index.toString(), m.a.toString(), m.b.toString(), m.c.toString(), m.d.toString(), m.tx.toString(), m.ty.toString(), this.ZOOM.toString()];
+				} else{
+					matchArray = ["c", index.toString(), m.a.toString(), m.b.toString(), m.c.toString(), m.d.toString(), m.tx.toString(), m.ty.toString(), this.ZOOM.toString()];
+				}
+				this.matchString = matchArray.join();
+				
+				var tm:Matrix = TLayer.transform.matrix;
+				//m.concat(tm);
+				m.tx = m.tx + tm.tx;
+				m.ty = m.ty + tm.ty;
+				//given the specific tm here, above two lines have the same effect as "m.concat(tm);"
+				OLayer.transform.matrix = m;
+				this.layerMatch.label = "Register Match Points";
+				this.layerMatch.toggle = true;
+				removeEventListener(KeyboardEvent.KEY_DOWN, this.onUserInterruptingMatching);
+				removeEventListener("ready_to_match", this.onReadyToMatch);
+				removeChild(this.matchMaker);
+				OMap.enable();
+				TMap.enable();
+				this.zoomer.enable();
+				this.navigator.enable();
+				
+				this.referenceSelect.visible = true;
+				this.modeSwitch.visible = true;
+				this.layerOverlay.visible = true;
+				if(this.imageLayers.length > 1){
+					this.imageSelect.visible = true;
+				}
+				if(this.editEnabled){
+					this.annotationSwitch.visible = true;
+					this.serverOperationType = 4;
+					Alert.show("Save the match information to the server?", "Alert", Alert.YES | Alert.NO, this, this.serverOperationAlertHandler);
+				}
+			}
+		}
+		
+		public function onUserInterruptingMatching(e:KeyboardEvent):void
+		{
+			if(e.keyCode == Keyboard.ESCAPE){
+				this.matchMaker.mute();
+				Alert.show("Terminate current matching process?", "Alert", Alert.OK | Alert.CANCEL, this, this.userInterruptionAlertHandler);
+			}
+		}
+		
+		public function userInterruptionAlertHandler(e:CloseEvent):void
+		{
+			if(e.detail == Alert.CANCEL){
+				this.matchMaker.enable();
+				return;
+			} else{
+				this.layerMatch.label = "Register Match Points";
+				this.layerMatch.mouseEnabled = true;
+				this.layerMatch.toggle = true;
+				removeEventListener(KeyboardEvent.KEY_DOWN, this.onUserInterruptingMatching);
+				removeEventListener("ready_to_match", this.onReadyToMatch);
+				this.matchMaker.hitArea = null;
+				removeChild(this.matchMaker);
+				this.layerMatch.selected = false;
+				for each (var m:Map in this.maps){
+					m.enable();
+				}
+				this.zoomer.enable();
+				this.navigator.enable();
+				
+				this.referenceSelect.visible = true;
+				this.modeSwitch.visible = true;
+				this.layerOverlay.visible = true;
+				if(this.imageLayers.length > 1){
+					this.imageSelect.visible = true;
+				}
+				if(this.editEnabled){
+					this.annotationSwitch.visible = true;
+				}
+			}
+		}
+		
+		public function onReadyToMatch(e:Event):void
+		{
+			this.layerMatch.label = "Match";
+			this.layerMatch.mouseEnabled = true;
+			this.layerMatch.toggle = false;
+		}
+		
+		public function prepareEditPanel():Panel
+		{
+			var ep:Panel = new Panel();
+			ep.name = "editPanel";
+			ep.title = "Edit Toolbox";
+			ep.width = 94;
+			ep.height = 315;
+			ep.x = 40;
+			ep.y = 40;
+			ep.addEventListener(MouseEvent.MOUSE_DOWN, this.onPanelDown);
+			ep.setStyle("horizontalAlign", "center");
+			ep.setStyle("verticalGap", 2);
+			ep.setStyle("borderThicknessLeft", 2);
+			ep.setStyle("borderThicknessRight", 2);
+			ep.setStyle("paddingTop", 4);
+			
+			var bls:Array = ["Ellipse", "Rectangle", "Polygon", "Erase", "Cancel", "SAVE", "RELOAD", "DELETE"];
+			var ep_b:Button;
+			for(var i:int=0; i<8; i++){
+				ep_b = new Button();
+				if(i < 3){
+					ep_b.toggle = true;
+				}
+				if(i < 5){
+					ep_b.setStyle("icon", this.icons[i]);
+					ep_b.toolTip = bls[i];
+				} else{
+					ep_b.label = bls[i];
+				}
+				ep_b.setStyle("fillAlphas", [1, 1]);
+				ep_b.setStyle("fillColors", [0xFFFFFF, 0xFFFFFF]);
+				ep_b.height = 32;
+				ep_b.width = 80;
+				ep_b.id = bls[i];
+				ep_b.addEventListener(MouseEvent.MOUSE_DOWN, this.onEditPanelButtonClick);
+				ep.addChild(ep_b);
+			}
+			
+			return ep;
+		}
+		
+		public function enableOrDisableAnnotating():void
+		{
+			var ml:MapLayer;
+			var m:Map;
+			var index:int;
+			
+			if(this.annotationSwitch.label == "Start Annotating"){
+				if(this.showingMapLayers.indexOf(this.currentML) == -1){
+					if(this.modeSwitch.label == "Include Reference"){
+						this.currentML = this.showingMapLayers[0];
+						stage.addEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML, false, 1);
+					} else{
+						this.currentML = this.showingMapLayers[1];
+					}	
+				} else{
+					this.currentML.AL.setSelector();
+					if(this.modeSwitch.label == "Include Reference"){
+						stage.addEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML, false, 1);
+					}
+				}
+				(this.currentML.parent as Map).focus();
+				for each (ml in this.imageLayers){
+					ml.AL.enable();
+				}
+				for each (m in this.maps){
+					m.clickZoomEnable = false;
+				}
+				this.ep_box.selected = false;
+				this.showOrHideEditPanel();
+				this.annotationSwitch.label = "Stop Annotating";
+				this.editPanelCheck.visible = true;
+				
+				this.modeSwitch.visible = false;
+				if(this.modeSwitch.label == "Include Reference"){
+					if(this.imageLayers.length > 1){
+						this.imageSelect.visible = false;
+					}
+					if(this.showingMapLayers.length > 1){
+						this.layerOverlay.visible = false;
+					}
+				} else{
+					this.referenceSelect.visible = false;
+					this.layerMatch.visible = false;
+					if(this.imageLayers.length > 1){
+						this.imageSelect.visible = false;
+					}
+					this.layerOverlay.visible = false;
+					
+					if(this.selectedReference){
+						this.selectedReference.AL.enable();
+					}
+					addEventListener("ROI_selected", this.onRoiSelected);
+				}
+				this.annotationHide.visible = false;
+			} else{
+				this._currentML.AL.emptyFocusList();
+				this._currentML.AL.unsetSelector();
+				for each (ml in this.imageLayers){
+					ml.AL.mute();
+				}
+				for each (m in this.maps){
+					m.clickZoomEnable = true;
+				}
+				(this.currentML.parent as Map).deFocus();
+				stage.removeEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML);
+				this.ep_box.selected = true;
+				this.showOrHideEditPanel();
+				this.annotationSwitch.label = "Start Annotating"
+				this.editPanelCheck.visible = false;
+				
+				this.modeSwitch.visible = true;
+				if(this.modeSwitch.label == "Include Reference"){
+					if(this.imageLayers.length > 1){
+						this.imageSelect.visible = true;
+					}
+					if(this.showingMapLayers.length > 1){
+						this.layerOverlay.visible = true;
+					}
+				} else{
+					this.referenceSelect.visible = true;
+					this.layerMatch.visible = true;
+					if(this.imageLayers.length > 1){
+						this.imageSelect.visible = true;
+					}
+					this.layerOverlay.visible = true;
+					
+					if(this.selectedReference){
+						this.selectedReference.AL.emptyFocusList();
+						this.selectedReference.AL.mute();
+					}
+					removeEventListener("ROI_selected", this.onRoiSelected);
+				}
+				this.annotationHide.visible = true;
+				
+				for each (ml in this.showingMapLayers){
+					if(ml.AL.modifiedInfoList.length > 0){
+						if(!this.unsavedAnnotation){
+							this.unsavedAnnotation = true;
+							this.unsavedMLs = new Array();
+						}
+						this.unsavedMLs.push(ml);
+					}
+				}
+				if(this.unsavedAnnotation){
+					this.serverOperationType = 9;
+					Alert.show("There are unsaved annotations.\n\nSave them to the server?", "Alert", Alert.YES | Alert.NO, this, this.serverOperationAlertHandler);
+				}
+			}
+		}
+		
+		public function decideCurrentML(e:MouseEvent):void
+		{	
+			for each (var ml:MapLayer in this.showingMapLayers){
+				//must use Map's mask to detect right area (however, not 100% accurate though),
+				//since Map's bound will change according to the ZoomfiyLayer
+				var m:Rectangle = ml.parent.mask.getBounds(stage);
+				if(m.contains(e.stageX, e.stageY)){
+					if(this.currentML != ml){
+						(this.currentML.parent as Map).deFocus();
+						(this.currentML.parent as Map).changeInitiator = false;
+						this.currentML = ml;
+						(this.currentML.parent as Map).focus();
+					}
+					//if the MouseDown is dispatched by an annotation or text attached to an annotation, don't draw the rubber band
+					if(e.target is Annotation || e.target is TextField){
+						e.stopImmediatePropagation();
+					}
+				}
+			}
+		}
+		
+		public function showOrHideAnnotation():void
+		{
+			var ml:MapLayer;
+			if(this.annotationHide.label == "Hide Annotations"){
+				for each(ml in this.showingMapLayers){
+					ml.AL.visible = false;	
+				}
+				this.annotationHide.label = "Show Annotations"
+			} else{
+				for each(ml in this.showingMapLayers){
+					ml.AL.visible = true;	
+				}
+				this.annotationHide.label = "Hide Annotations"
+			}
+		}
+		
+		public function showOrHideEditPanel():void
+		{
+			if(!this.ep_box.selected){
+				if(this.editPanel.parent == null){
+					addChild(this.editPanel);
+					return;
+				}
+				if(!this.editPanel.visible){
+					this.editPanel.visible = true;
+				}
+			} else{
+				this.editPanel.visible = false;
+			}
+		}
+		
+		public function onDrawingDone(e:Event):void
+		{
+			this.currentML.AL.drawer = null;
+			this.currentML.AL.setSelector();
+			this.drawer = null;
+			for each(var m:Map in this.maps){
+				m.enable();
+			}
+			this.pressedButton.selected = false;
+			this.pressedButton = null;
+			removeEventListener("drawing_done", this.onDrawingDone);
+		}
+		
+		public function onEditPanelButtonClick(e:MouseEvent):void
+		{
+			e.stopPropagation();
+			
+			var b:Button = Button(e.target);
+			
+			var m:Map;
+			if(b.id == "Ellipse" || b.id == "Rectangle" || b.id == "Polygon"){
+				if(!this.drawer){
+					this.currentML.AL.unsetSelector();
+					this.drawer = new Drawer();
+					for each(m in this.maps){
+						m.mute();
+					}
+					this.currentML.AL.drawer = this.drawer;
+				}
+				this.drawer.type = ["Ellipse", "Rectangle", "Polygon"].indexOf(b.id);
+				if(this.pressedButton){
+					this.pressedButton.selected = false;
+				}
+				this.pressedButton = b;
+				this.pressedButton.selected = true;
+				addEventListener("drawing_done", this.onDrawingDone);
+			}
+			if(b.id == "Erase"){
+				this.currentML.AL.erase();
+			}
+			if(b.id == "Cancel"){
+				if(this.pressedButton){
+					this.drawer = null;
+					this.currentML.AL.drawer = null;
+					this.currentML.AL.setSelector();
+					for each(m in this.maps){
+						m.enable();
+					}
+					this.pressedButton.selected = false;
+					this.pressedButton = null;
+					removeEventListener("drawing_done", this.onDrawingDone);
+				}
+			}
+			if(b.id == "SAVE"){
+				this.serverOperationType = 1;
+				stage.removeEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML);
+				Alert.show("Save annotations in current map to the server?", "Alert", Alert.OK | Alert.CANCEL, this, this.serverOperationAlertHandler);
+			}
+			if(b.id == "RELOAD"){
+				this.serverOperationType = 2;
+				stage.removeEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML);
+				Alert.show("Reload annotations from the server?\n\nAll unsaved annotations in current map will be lost.", "Alert", Alert.OK | Alert.CANCEL, this, this.serverOperationAlertHandler);
+			}
+			if(b.id == "DELETE"){
+				this.serverOperationType = 3;
+				stage.removeEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML);
+				Alert.show("Some of the chosen annotaions may be saved on server.\n\nDelete them all as well?", "Alert", Alert.OK | Alert.CANCEL, this, this.serverOperationAlertHandler);
+			}
+		}
+		
+		public function serverOperationAlertHandler(e:CloseEvent):void
+		{
+			if(e.detail == Alert.CANCEL || e.detail == Alert.NO){
+				this.serverOperationType = 0;
+			} else{
+				switch(this.serverOperationType)
+				{
+					case 1:
+					this.currentML.AL.save();
+					this.serverOperationType = 0;
+					return;
+					
+					case 2:
+					this.currentML.AL.annotationLoaded = false;
+					this.currentML.AL.load();
+					this.serverOperationType = 0;
+					return;
+					
+					case 3:
+					this.currentML.AL.del();
+					this.serverOperationType = 0;
+					return;
+					
+					case 9:
+					for each (var ml:MapLayer in this.unsavedMLs){
+						ml.AL.save();
+					}
+					this.unsavedAnnotation = false;
+					this.serverOperationType = 0;
+					return;
+				}
+				this.serverOperation(this.serverOperationType);
+			}
+			if(this.annotationSwitch.label == "Stop Annotating"){
+				stage.addEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML, false, 1);
+			}
+		}
+		
+		public function serverOperation(type:int):void
+		{
+			var url_r:URLRequest;
+			var url_v:URLVariables;
+			var url_l:URLLoader;
+			var imagepath:String;
+			
+			url_v = new URLVariables();
+			switch(type)
+			{
+				case 4:
+				url_r = new URLRequest("http://www.credrivermice.org/characterizations/savematch");
+				url_r.method = URLRequestMethod.POST;
+				url_v.imagepath = (this.showingMapLayers[1] as MapLayer).URL.replace("http://www.credrivermice.org", "");
+				url_v.match = this.matchString;
+				trace(this.matchString.length);
+				break;
+				
+				case 5:
+				url_r = new URLRequest("http://www.credrivermice.org/characterizations/getmatch");
+				url_r.method = URLRequestMethod.GET;
+				url_v.imagepath = (this.showingMapLayers[0] as MapLayer).URL.replace("http://www.credrivermice.org", "");
+				break;
+				
+				default:
+				trace("The serverOperationType is not in [4, 5]");
+				break;
+			}
+			url_r.data = url_v;
+			
+			url_l = new URLLoader();
+			url_l.addEventListener("complete", this.onURLRequestSucceed);
+			url_l.addEventListener("ioError", this.onURLRequestFail);
+			url_l.load(url_r);
+		}
+		
+		public function onURLRequestSucceed(e:Event):void
+		{
+			trace(e.toString());
+			trace(e.target.data);
+			
+			var ai:AnnotationInfo;
+			var i:int;
+			switch(this.serverOperationType)
+			{
+				case 4:
+				break;
+				
+				case 5:
+				var matchString:String = e.target.data as String;
+				if(matchString != ""){
+					var matchArray:Array = matchString.split(",");
+					this.matchInfo = new Object();
+					this.matchInfo.orientation = matchArray[0];
+					this.matchInfo.index = int(matchArray[1]);
+					this.matchInfo.a = Number(matchArray[2]);
+					this.matchInfo.b = Number(matchArray[3]);
+					this.matchInfo.c = Number(matchArray[4]);
+					this.matchInfo.d = Number(matchArray[5]);
+					this.matchInfo.tx = Number(matchArray[6]);
+					this.matchInfo.ty = Number(matchArray[7]);
+					this.matchInfo.zoom = Number(matchArray[8]);
+				}
+				break;
+				
+				default:
+				break;
+			}
+			
+			if(this.serverOperationType == 5){
+				this.prepareReference();
+			}
+			this.serverOperationType = 0;
+		}
+				
+		public function onURLRequestFail(e:IOErrorEvent):void
+		{
+			trace(e.toString());
+			
+			if(this.serverOperationType == 5){
+				this.prepareReference();
+			}
+			this.serverOperationType = 0;
+			stage.removeEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML);
+			Alert.show("Request to the server could NOT be completed.", "Server Operation Fail", Alert.OK, this, this.urlRequestFailAlertHander);
+		}
+		
+		public function urlRequestFailAlertHander(e:CloseEvent):void
+		{
+			stage.addEventListener(MouseEvent.MOUSE_DOWN, this.decideCurrentML, false, 1);
+		}
+		
+		public function onPanelDown(e:MouseEvent):void
+		{
+			e.stopPropagation();
+			
+			var p:Panel = e.currentTarget as Panel;
+			p.startDrag();
+			p.addEventListener(MouseEvent.MOUSE_UP, this.onPanelUp)
+		}
+		
+		public function onPanelUp(e:MouseEvent):void
+		{
+			e.stopPropagation();
+			
+			var p:Panel = e.currentTarget as Panel;
+			p.stopDrag();
+			p.removeEventListener(MouseEvent.MOUSE_UP, this.onPanelUp);
+		}
+		
+		/*
+		public function onMouseMove(e:MouseEvent):void
+		{
+			this.addEventListener(MouseEvent.MOUSE_UP, this.onMouseUp);
+			
+			if(!this.proxy){
+				var app:Object = Application.application;
+				var atm:Matrix = (parent.parent as MapLayer).transform.matrix.clone();
+				
+				var info_copy:AnnotationInfo = this.info.clone();
+				info_copy.id = -1;
+				info_copy.x = app.mouseX;
+				info_copy.y = app.mouseY;
+				var oc:Point = atm.transformPoint(new Point(info_copy.x * this.zoomScale, info_copy.y * this.zoomScale));
+				var delta_x:Number = oc.x - app.mouseX;
+				var delta_y:Number = oc.y - app.mousey;
+				
+				var path:String = '';
+				for each (var seg in info_copy.segments){
+					var a1:Point = atm.transformPoint(new Point(seg.anchor1.x * this.zoomScale, seg.anchor1.y * this.zoomScale));
+					seg.anchor1.x = a1.x + delta_x;
+					seg.anchor1.y = a1.y + delta_y;
+					var a2:Point = atm.transformPoint(new Point(seg.anchor2.x * this.zoomScale, seg.anchor2.y * this.zoomScale));
+					seg.anchor2.x = a2.x + delta_x;
+					seg.anchor2.y = a2.y + delta_y;
+					
+					var s:String = '';
+					if(seg is QuadraticBezier){
+						var c:Point = atm.transformPoint(new Point(seg.control.x * this.zoomScale, seg.control.y * this.zoomScale));
+						seg.control.x = c1.x + delta_x;
+						seg.control.y = c1.y + delta_y;
+						s = String(seg.anchor1.x) + ',' + String(seg.anchor1.y) + ' ' + String(seg.control.x) + ',' + String(seg.control.y) + ' ' + String(seg.anchor2.x) + ',' + String(seg.anchor2.y);
+					} else if(seg is CubicBezier){
+						var c1:Point = atm.transformPoint(new Point(seg.control1.x * this.zoomScale, seg.control1.y * this.zoomScale));
+						seg.control1.x = c1.x + delta_x;
+						seg.control1.y = c1.y + delta_y;
+						var c2:Point = atm.transformPoint(new Point(seg.control2.x * this.zoomScale, seg.control2.y * this.zoomScale));
+						seg.control2.x = c2.x + delta_x;
+						seg.control2.y = c2.y + delta_y;
+						s = String(seg.anchor1.x) + ',' + String(seg.anchor1.y) + ' ' + String(seg.control1.x) + ',' + String(seg.control1.y) + ' ' + String(seg.control2.x) + ',' + String(seg.control2.y) + ' ' + String(seg.anchor2.x) + ',' + String(seg.anchor2.y);
+					} else{
+						s = String(seg.anchor1.x) + ',' + String(seg.anchor1.y) + ' ' + String(seg.anchor2.x) + ',' + String(seg.anchor2.y);
+					}
+				
+					path = path + s + ';';
+				}
+				info_copy.path = path.slice(0, path.length - 1);
+			
+				this.proxy = new Annotation();
+				Application.application.addChild(this.proxy);
+				this.proxy.info = info_copy;
+				this.proxy.zoomScale = 1;
+				this.proxy.update();
+			}
+		}
+		*/
+				
+		/*
+		public function showPathEditWorkspace():void
+		{
+			var pew:Panel = new Panel();
+			pew.name = "pathEditWorkspace";
+			pew.title = "Path Edit Workspace";
+			pew.width = 800;
+			pew.height = 600;
+			pew.x = 100;
+			pew.y = 50;
+			pew.addEventListener(MouseEvent.MOUSE_DOWN, this.onPanelDown);
+			
+			this.playGround = new AnnotationLayer();
+			var ai:AnnotationInfo;
+			var yamlObject:String;
+				var start:uint = 0;
+				var end:int = this.yamlFile.indexOf("---", start + 1);
+				while(end != -1){
+					yamlObject = this.yamlFile.slice(start, end);
+					ai = YAML.decode(yamlObject) as AnnotationInfo;
+					this.playGround.annotationInfoList.push(ai);
+					this.playGround.createAnnotation(ai);
+					start = end;
+					end = this.yamlFile.indexOf("---", start + 1);
+				}
+				//don't forget the last annotation in the yaml string
+				yamlObject = this.yamlFile.slice(start);
+				ai = YAML.decode(yamlObject) as AnnotationInfo;
+				this.playGround.annotationInfoList.push(ai);
+				this.playGround.createAnnotation(ai);
+				for each (var a:Annotation in this.playGround.annotationList){
+					a.scaleX = 0.5;
+					a.scaleY = 0.5;
+				}
+			
+			var wrapper:UIComponent = new UIComponent();
+			this.playGround.x = -130;
+			this.playGround.y = -120;
+			wrapper.addChild(this.playGround);
+			pew.addChild(wrapper);
+			addChild(pew);
+			
+			var b:Button = new Button();
+			b.id = "autoPathClose";
+			b.label = "Auto";
+			b.width = 80;
+			b.height = 18;
+			b.addEventListener(MouseEvent.CLICK, this.autoClosePath);
+			pew.addChild(b);
+		}
+		
+		public function autoClosePath(e:MouseEvent):void
+		{
+			e.stopPropagation();
+			
+			var step:Number = 0.05;
+			var tolerence:Number = 5;
+			
+			var startPoint:Point;
+			var pointSP:Point;
+			var segmentSP:CubicBezier;
+			var pathSP:AnnotationInfo;
+			var distanceSP:Number;
+			
+			var endPoint:Point;
+			var pointEP:Point;
+			var segmentEP:CubicBezier;
+			var pathEP:AnnotationInfo;
+			var distanceEP:Number;
+			
+			var p:Point;
+			var d:Number
+			for each (var testAI:AnnotationInfo in this.playGround.annotationInfoList){
+				if(!testAI.isClose){
+					startPoint = testAI.segments[0].anchor1;
+					pointSP = null;
+					segmentSP = null;
+					pathSP = null;
+					distanceSP = Number.MAX_VALUE;
+					
+					endPoint = testAI.segments[testAI.segments.length - 1].anchor2;
+					pointEP = null;
+					segmentEP = null;
+					pathEP = null;
+					distanceEP = Number.MAX_VALUE;
+					
+					for each (var ai:AnnotationInfo in this.playGround.annotationInfoList){
+						if(ai == testAI){
+							continue;
+						}
+						for each (var segment:CubicBezier in ai.segments){
+							for(var i:int=0; i<=1/step; i++){
+								p = segment.pointAtT(i * step);
+								d = Point.distance(startPoint, p);
+								if(d < distanceSP){
+									pointSP = p;
+									distanceSP = d;
+									if(segment != segmentSP){
+										segmentSP = segment;
+										if(ai != pathSP){
+											pathSP = ai;
+										}
+									}
+								}
+								d = Point.distance(endPoint, p);
+								if(d < distanceEP){
+									pointEP = p;
+									distanceEP = d;
+									if(segment != segmentEP){
+										segmentEP = segment;
+										if(ai != pathEP){
+											pathEP = ai;
+										}
+									}
+								}
+							}
+						}
+					}
+					
+					if(pathSP == pathEP){
+						if(distanceSP + distanceEP <= tolerence){
+							// then close the path
+							testAI.segments.push(new CubicBezier(endPoint, endPoint, pointEP, pointEP));
+							var j:int;
+							if(pathEP.segments.indexOf(segmentEP) > pathSP.segments.indexOf(segmentSP)){
+								testAI.segments.push(new CubicBezier(pointEP, pointEP, segmentEP.anchor1, segmentEP.anchor1));
+								if(pathEP.segments.indexOf(segmentEP) > pathSP.segments.indexOf(segmentSP) + 1){
+									for(j=pathEP.segments.indexOf(segmentEP)-1; j>pathSP.segments.indexOf(segmentSP); j--){
+										testAI.segments.push(pathEP.segments[j].inverse());
+									}
+								}
+								testAI.segments.push(new CubicBezier(segmentSP.anchor2, segmentSP.anchor2, pointSP, pointSP));
+							} else if(pathEP.segments.indexOf(segmentEP) < pathSP.segments.indexOf(segmentSP)){
+								testAI.segments.push(new CubicBezier(pointEP, pointEP, segmentEP.anchor2, segmentEP.anchor2));
+								if(pathEP.segments.indexOf(segmentEP) < pathSP.segments.indexOf(segmentSP) - 1){
+									for(j=pathEP.segments.indexOf(segmentEP)+1; j<pathSP.segments.indexOf(segmentSP); j++){
+										testAI.segments.push(pathEP.segments[j]);
+									}
+								}
+								testAI.segments.push(new CubicBezier(segmentSP.anchor1, segmentSP.anchor1, pointSP, pointSP));
+							} else{
+								testAI.segments.push(new CubicBezier(pointEP, pointEP, pointSP, pointSP));
+							}
+							testAI.segments.push(new CubicBezier(pointSP, pointSP, startPoint, startPoint));
+							testAI.isClose = true;
+						}
+					}
+				} 
+			}
+			
+			for each (var a:Annotation in this.playGround.annotationList){
+				a.update();
+				a.scaleX = 0.5;
+				a.scaleY = 0.5;
+			}
+			
+			trace(Math.pow(4, 0.2));
+		}
+		*/
+		
+	]]>
+</mx:Script>
+
+	<mx:ApplicationControlBar dock="true"
+							  fillColors="[0x4B999A, 0x4B999A]" fillAlphas="[0.5, 0]"
+							  paddingTop="2" paddingBottom="2" paddingLeft="2" paddingRight="2">
+		<mx:HBox width="100%" height="100%" horizontalAlign="center">
+			<mx:HBox width="100%" height="100%" horizontalAlign="left">
+				<mx:PopUpButton id="referenceSelect" height="18" width="115" label="References" visible="false" open="onReferenceListOpen()" close="onReferenceListClose()" click="adjustReferenceList()"/>
+				<mx:Button id="layerMatch" height="18" label="Register Match Points" width="150" toggle="true" visible="false" click="makeMatch()"/>
+				<!--<mx:HBox id="referenceCheck" width="100%" height="100%" horizontalAlign="left" visible="false">
+					<mx:CheckBox id="r_box" selected="false" click="showOrHideReference()"/>
+					<mx:Text text="Hide Reference"/>
+				</mx:HBox>-->
+			</mx:HBox>
+
+			<mx:HBox width="100%" height="100%" horizontalAlign="left">
+			<mx:Button id="modeSwitch" height="18" label="Include Reference" width="135" visible="true" click="switchMode()"/>
+				<mx:Button id="annotationHide" height="18" label="Hide Annotations" width="135" visible="true" click="showOrHideAnnotation()"/>
+				<mx:Button id="annotationSwitch" height="18" label="Start Annotating" width="145" visible="false" click="enableOrDisableAnnotating()"/>
+				<mx:HBox id="editPanelCheck" width="100%" height="100%" horizontalAlign="left" visible="false">
+					<mx:CheckBox id="ep_box" click="showOrHideEditPanel()"/>
+					<mx:Text text="Hide Edit Panel"/>
+				</mx:HBox>
+			</mx:HBox>
+			
+			<mx:HBox width="100%" height="100%" horizontalAlign="right">
+				<mx:PopUpButton id="alphaAdjust" height="18" label="Adjust Alpha Values" openAlways="true" visible="false"/>
+				<mx:Button id="layerOverlay" height="18" label="Overlay Layers" width="125" visible="false" click="overlayOrExpand()"/>
+				<mx:PopUpButton id="imageSelect" height="18" label="Select Layers" openAlways="true" visible="false"/>
+			</mx:HBox>
+		</mx:HBox>
+		
+		<!--<mx:Button id="pathPrepare" label="Pre" width="50" height="18" visible="true" click="showPathEditWorkspace()"/>-->
+	</mx:ApplicationControlBar>
+
+	<mx:Grid id="mapGrid" y="2"
+			 width="100%" height="100%"
+			 horizontalGap="0" verticalGap="0">
+	</mx:Grid>
+	
+	<mx:VBox id="rightVBox" width="100%" height="100%"
+			 horizontalAlign="right" verticalAlign="bottom"
+			 paddingBottom="2" paddingRight="2">
+		<fz:Zoomer id="zoomer" name="z"
+				   width="35" height="135"
+				   tickInterval="1" toolTip="zoom"
+				   minimum="0" alpha="0.8"
+				   borderColor="0x4B999A" visible="false">
+		</fz:Zoomer>
+	</mx:VBox>
+
+
+
+</mx:Application>
+	
+	
+	
+	
+	
+	
+	
+
+	<!--
+	<mx:Panel id="p" headerHeight="0" borderThicknessTop="0" borderThicknessBottom="0" borderThicknessLeft="0" borderThicknessRight="0"
+		      width="100%" height="100%" layout="absolute" creationComplete="initPanel();">
+	</mx:Panel>
+	-->
+	
+	<!--
+	<mx:Panel id="p" headerHeight="3" borderThicknessTop="0" borderThicknessBottom="3" borderThicknessLeft="3" borderThicknessRight="3"
+		      width="100%" height="100%" layout="absolute" creationComplete="initPanel()">
+		<fz:Map id="mapviewer" height="100%" width="100%" creationComplete="initMap()"/>
+		<mx:VSlider id="zoomSlider" enabled="true" allowTrackClick="true" snapInterval="0.2"
+					liveDragging="false" borderColor="#4B999A" alpha="0.7"
+					showDataTip="true" tickInterval="1" toolTip="zoom"/>
+	</mx:Panel>
+	-->
+		<!--
+		<mx:VBox label="Static" horizontalAlign="center" width="100%" height="100%">
+			<mx:HBox height="40">
+				<mx:Text text="zoom"/>
+				<mx:TextInput width="75" id="zoomVal" displayAsPassword="false" editable="true" enabled="true"/>
+				<mx:Text text="xpos"/>
+				<mx:TextInput width="75" id="xpos" displayAsPassword="false" editable="true" enabled="true"/>
+				<mx:Text text="ypos"/>
+				<mx:TextInput width="75" id="ypos" displayAsPassword="false" editable="true" enabled="true"/>
+				<mx:Button label="Set View" id="btn_setview" enabled="true" click="onSetView()"/>
+
+				<mx:Text text="width"/>
+				<mx:TextInput width="75" id="view_width" displayAsPassword="false" editable="true" enabled="true"/>
+				<mx:Text text="height"/>				
+				<mx:TextInput width="75" id="view_height" displayAsPassword="false" editable="true" enabled="true"/>
+				<mx:Button label="Set Size" id="btn_setsize" enabled="true" click="onSetSize()"/>
+			</mx:HBox>
+			<fz:StaticZoomifyImage id="viewer" height="90%" width="90%" x="22" y="58"
+		 		imageURL="http://mouse.bio.brandeis.edu:3000/test_dst/yfph/"/>
+		</mx:VBox>
+		-->
+
